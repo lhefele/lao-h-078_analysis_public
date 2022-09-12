@@ -1,0 +1,887 @@
+---
+title: "merge data"
+author: "Lisa"
+date: "4 juillet 2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Analysis for manuscript: "Low seroprotection against diphtheria and tetanus in Lao adolescents"
+
+
+
+
+## Background
+
+Code to reproduce the results presented in **Vantava et al. (2022). Low seroprotection against diphtheria and tetanus in Lao adolescents**. 
+
+Submitted to Journal of Infectious Diseases.
+
+
+
+
+## preparation
+
+
+### packages
+
+```{r packages}
+
+library(tidyverse) 
+library(gtsummary) 
+library(ggforce)
+library(ggpubr)    
+library(epitools) 
+library(car)      
+library(sjPlot)   
+library(MASS)     
+library(effects)  
+library(emmeans) 
+
+library(mgcv)
+
+```
+
+
+
+### dataset import
+
+
+```{r dataset}
+
+# read in data
+# data is already pre-processed
+# new variables were created
+# only variables needed for analysis were selected
+data <- read.csv("data/lao-h-078_data_minimal.csv", header=T, dec=",", sep=";",
+                 stringsAsFactors = TRUE)
+
+
+```
+
+
+### overview
+
+```{r overview}
+
+glimpse(data)
+
+```
+
+
+```{r variables}
+
+# check variable "hcf"
+data %>% count(hcf) # factors are not in the right order
+data %>% mutate(hcf = factor(hcf, levels=c("ch", "ph", "dh", "hc"))) -> data
+
+# check variable "sex"
+data %>% mutate(sex = factor(sex, levels=c("male", "female"))) -> data
+
+```
+
+
+
+
+
+## analysis
+
+
+
+```{r table 1 characteristics and serology results overall}
+
+# TABLE participant testing data overview
+# Table with participant characteristics is already in previous prublication!
+
+############## NUMBERS FOR TABLE S1 
+############## overall (both study sites combined)
+
+data %>% 
+  mutate(prov = ifelse(prov == "vtn", "vientiane capital", "bolikhamxay")) %>%
+  mutate(prov = factor(prov, levels=c("vientiane capital", "bolikhamxay"))) %>% 
+  dplyr::select(prov, 
+         age, 
+         sex, 
+         ethnic_group,
+         tetanus,
+         diphtheria) %>% # keep only columns of interest
+  tbl_summary(     
+    #by = prov,     # stratify entire table by outcome
+    statistic = list(all_continuous() ~ "{mean} ({sd})",  # stats and format for continuous columns
+                     all_categorical() ~ "{n} / {N} ({p}%)"),   # stats and format for categorical columns
+    digits = all_categorical() ~ 2,                              # rounding for continuous columns
+    #digits = 2,  
+    type   = all_categorical() ~ "categorical",  # force all categorical levels to display
+    label  = list(                    # display labels for column names
+      prov   ~ "province",                           
+      age    ~ "age in years",
+      sex ~ "sex",
+      ethnic_group ~ "ethnicity",
+      tetanus ~ "tetanus immunity level",
+      diphtheria    ~ "diphtheria immunity level"),
+    missing_text = "missing"          # how missing values should display
+  ) %>% 
+   modify_caption("**Table S1. Participant characteristics and serology results - overall**")
+
+
+```
+
+
+```{r table s1 characteristics and serology results by province}
+
+############## NUMBERS FOR TABLE S1 
+############## split by recruitment site
+
+data %>%
+  mutate(prov = ifelse(prov == "vtn", "vientiane capital", "bolikhamxay")) %>%
+  mutate(prov = factor(prov, levels=c("vientiane capital", "bolikhamxay"))) %>% 
+
+  dplyr::select(prov, 
+         age, 
+         sex, 
+         ethnic_group,
+         tetanus,
+         diphtheria) %>% # keep only columns of interest
+  tbl_summary(     
+    by = prov,     # stratify entire table by outcome
+    statistic = list(all_continuous() ~ "{mean} ({sd})",  # stats and format for continuous columns
+                     all_categorical() ~ "{n} / {N} ({p}%)"),   # stats and format for categorical columns
+    digits = all_categorical() ~ 2,                              # rounding for continuous columns
+    type   = all_categorical() ~ "categorical",  # force all categorical levels to display
+    label  = list(                    # display labels for column names
+      prov   ~ "province",                           
+      age    ~ "age in years",
+      sex ~ "sex",
+      ethnic_group ~ "ethnicity",
+      tetanus ~ "tetanus immunity level",
+      diphtheria    ~ "diphtheria immunity level"),
+    missing_text = "missing"          # how missing values should display
+  ) %>% 
+   modify_caption("**Table S1. Participant characteristics and serology results - by province**")
+
+
+```
+
+
+
+
+
+
+```{r figure 1 - diphtheria}
+
+############## FIGURE 1
+
+#  INCLUDED IN MANUSCRIPT
+
+# some rows will not have an entry after aggregating the percentages of protected
+# students per age group 
+# I add 0% manually to increase readability of graph
+data.frame(hcf = c("ph", "ph", "ph", "ph"),
+           age = c(11,11,12,12), 
+           sex = c("male","female","male","female"),
+           prop = c(0.0,0.0,0.0,0.0)) -> add_rows_d
+
+
+data %>% 
+  dplyr::select(hcf, age, sex, d_interpretation) %>% 
+  dplyr::group_by(hcf, age, sex, d_interpretation) %>% 
+  summarize(freq = n()) %>% 
+  mutate(prop = freq / sum(freq)) %>% 
+  filter(d_interpretation == "protected") %>% 
+  dplyr::select(hcf, age, sex, prop) %>% 
+  ungroup() %>% 
+  rbind(add_rows_d) %>% 
+  
+  ggplot() +
+  geom_line(aes(x=age, y=prop, color = sex), size=1.2) + 
+  ylim(0,1) +
+  xlim(11,18) +
+  facet_wrap(~hcf) +
+  theme_bw() +
+  scale_color_manual(values=c("#440154FF", "#3CBB75FF")) +
+  
+  ggtitle("proportion of participants with immunisation protection \nagainst diphtheria") +
+  ylab("proportion immunisation protection \nagainst diphtheria") +
+  xlab("age (years)") -> figure_1_diphtheria
+
+figure_1_diphtheria
+  
+
+
+```
+
+
+
+
+
+```{r figure s1}
+
+data %>% 
+  filter(sex == "male") %>% 
+  ggplot(aes(age, d_conc, color=d_outside_range)) + 
+  geom_jitter() + 
+  geom_smooth(method = "lm", color = "black") +
+  labs(colour = "outside range")+
+  scale_color_manual(values = c("blue4","orangered")) +
+  theme_bw() +
+  ylab("anti-diphtheria titer (IU/ml)") +
+  xlab("age (years)") +
+  geom_hline(yintercept=0.1, color = "red", size=0.8) +
+  geom_hline(yintercept = 2, color = "grey16", linetype = "dashed") +
+  facet_zoom(ylim = c(0, 0.75)) -> A
+
+data %>% 
+  filter(sex == "female") %>% 
+  ggplot(aes(age, d_conc, color=d_outside_range)) + 
+  geom_jitter() + 
+  geom_smooth(method = "lm", color = "black") +
+  labs(colour = "outside range")+
+  scale_color_manual(values = c("blue4","orangered")) +
+  theme_bw() +
+  ylab("anti-diphtheria titer (IU/ml)") +
+  xlab("age (years)") +
+  geom_hline(yintercept=0.1, color = "red", size=0.8) +
+  geom_hline(yintercept = 2, color = "grey16", linetype = "dashed") +
+  facet_zoom(ylim = c(0, 0.75)) -> B
+
+
+ggarrange(A, B, ncol = 1, nrow = 2,labels = c("A", "B")) -> figure_S1
+
+figure_S1
+
+```
+
+
+
+```{r table s2 bivariate anti-diphtheria}
+
+tbl=table(data$prov, data$d_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.0002128
+epitab(tbl)
+
+tbl=table(data$district, data$d_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.00007027
+epitab(tbl)
+
+tbl=table(data$sex, data$d_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.00000001516
+epitab(tbl)
+
+tbl=table(data$age_group, data$d_interpretation)
+tbl
+chisq.test(tbl)  # p-value = 0.03484
+epitab(tbl)
+
+tbl=table(data$hcf, data$d_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.00001344
+epitab(tbl)
+
+tbl=table(data$ethnic_group, data$d_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.912
+
+tbl=table(data$n_household_members, data$d_interpretation)
+tbl
+chisq.test(tbl) # 0.6243
+
+tbl=table(data$vaccinations_school, data$d_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.5385
+
+
+################################################ Note regarding variable selection
+
+# all variables with p<0.2 will be selected for logistic regression modelling
+
+# province, district, age, sex, type of nearest HCF 
+# province and district are essentially the same variable; and both of them overlap with type of nearest HCF
+
+
+```
+
+
+
+```{r figure s2 correlation hcf and district}
+
+# The type of nearest HCF will overlap a lot with the variables for district / province
+# Here is a visualization of this
+# Central hospitals are exclusively in Vientiane Capital
+# There is only 1 provincial hospital in this study and that is in Paksan (BOlikhamxay)
+
+
+data %>%
+  mutate(district = ifelse(district == "vientiane", "vientiane capital",
+                      ifelse(district == "paksan", "bolikhamxay - paksan", 
+                             "bolikhamxay - pakkading"))) %>% 
+  mutate(district = factor(district, 
+                             levels=c("vientiane capital", 
+                                      "bolikhamxay - paksan", 
+                                      "bolikhamxay - pakkading"))) %>% 
+  group_by(district, hcf) %>% 
+  summarize(freq = n()) %>% 
+  mutate(prop = freq / sum(freq)) %>% 
+  ggplot(aes(x=factor(district), 
+             y=prop, 
+             fill = hcf)) + 
+  geom_col(colour="black")  +
+  xlab("location") + 
+  ylab ("proportion") +
+  scale_fill_manual(name = "HCF", 
+                    values = c("#481567FF", "#39568CFF",
+                               "#20A387FF", "#73D055FF")) +
+  ggtitle("proportion of HCFs according to study location")  +
+  theme_bw() -> figure_S2
+
+figure_S2
+
+```
+
+
+
+
+```{r multivariable models - diphtheria}
+
+# What are the variables from bivariate analysis
+## age group 
+## sex
+## district / province
+## HCF
+
+
+############## collinearity for district / province / nearest_HCF
+
+
+# first check for district and nearest-HCF
+mod <- glm(d_interpretation ~ age_group
+           + sex
+           + district
+           + hcf, data = data, family=binomial())
+summary(mod) 
+
+vif(mod) # not ok
+
+vcov(mod)
+m <- vcov(mod)
+cov2cor(m)
+mcor <- cov2cor(m)
+mcor                 # overlap HCF, district
+
+
+# first check for province and nearest-HCF
+mod <- glm(d_interpretation ~ age_group
+           + sex
+           + prov
+           + hcf, data = data, family=binomial())
+summary(mod) 
+
+vif(mod) # ok
+
+vcov(mod)
+m <- vcov(mod)
+cov2cor(m)
+mcor <- cov2cor(m)
+mcor                 # overlap HCF, province
+# Model should only contain one of the variables
+
+
+
+############## Model 1
+
+mod1 <- glm(d_interpretation ~ age_group
+           + sex
+           + district, data = data, family=binomial())
+summary(mod1) 
+
+vif(mod1) # ok
+
+vcov(mod1)
+m <- vcov(mod1)
+cov2cor(m)
+mcor <- cov2cor(m)
+mcor
+
+step <- stepAIC(mod1)
+summary(step)
+step$anova          
+
+
+
+
+############## Model 2
+
+mod2 <- glm(d_interpretation ~ age_group
+           + sex
+           + prov, data = data, family=binomial())
+summary(mod2) 
+
+vif(mod2) # ok
+
+vcov(mod2)
+m <- vcov(mod2)
+cov2cor(m)
+mcor <- cov2cor(m)
+mcor
+
+
+step <- stepAIC(mod2)
+summary(step)
+step$anova           
+
+
+
+
+############## Model 3
+
+mod3 <- glm(d_interpretation ~ age_group
+           + sex
+           + hcf, data = data, family=binomial())
+summary(mod3) 
+
+vif(mod3) # ok
+
+vcov(mod3)
+m <- vcov(mod3)
+cov2cor(m)
+mcor <- cov2cor(m)
+mcor
+
+
+step <- stepAIC(mod3)
+summary(step)
+step$anova           
+
+
+############## Model comparison
+
+AIC(mod1) # [1] 836.55
+AIC(mod2) # [1] 839.43
+AIC(mod3) # [1] 834.75
+# Model 3 has the lowest AIC; but there is not much difference between the models
+
+
+
+############## Check for interactions
+
+mod <- glm(d_interpretation ~ (age_group + sex + hcf)^2, data = data, family=binomial())
+summary(mod) # yes, there are interactions
+# given the sample size, only the interaction between age and sex will be included in model
+
+
+############## TABLE S3
+############## Model 3 with interaction
+# Now include interaction between age and sex
+
+mod <- glm(d_interpretation ~ age_group*sex + hcf, data = data, family=binomial())
+summary(mod) # 817.94
+
+cbind(round(coef(summary(mod)),4), OR=exp(mod$coefficients), exp(confint(mod))) 
+
+tab_model(mod, show.aic = T) # wrong estimates
+
+
+```
+
+
+```{r table 1 final model diphtheria and table s3}
+
+# in the code chunk before, I looked at model options
+# I selected the final model
+# now we extract the model information for Table 1
+
+######################## final model - age is categorical
+mod <- glm(d_interpretation ~ age_group*sex + hcf, data = data, family=binomial())
+summary(mod) # 817.94
+# these estimates from the model are not correct
+cbind(round(coef(summary(mod)),4), OR=exp(mod$coefficients), exp(confint(mod)))
+
+######################## model comparisons
+null <- glm(d_interpretation ~ 1, data = data, family=binomial())
+anova(mod, null, test="Chisq") # significant
+Anova(mod, type = "II", test.statistic = "Wald") # significant
+plot(fitted(mod),rstandard(mod))
+
+
+
+########################################################### table s3
+# extract numbers from model
+# but estimates for interaction are not correct yet 
+# estimates for age and sex cannot be interpreted individually
+sjPlot::tab_model(mod, show.aic = T, transform = NULL)
+sjPlot::tab_model(mod, show.aic = T) # table with OR (wrong OR for variables in interaction)
+
+
+
+
+########################################################### table 1
+
+# true ORs for variables that interact with each other can be calculated by hand from the information we obtained above
+# calculation done in excel; NOT part of the script
+
+# alternative: use allEffects()
+
+allEffects(mod) # only probabilities
+allEffects(mod) %>% summary() # probabilities and intervals
+
+# real log-odds 
+res <- allEffects(mod)    # real log-odds can also be obtained by using allEffects()
+res$`age_group:sex`$fit   # same as calculated by hand
+# 1 -1.24526764  # age group <=13 y : male
+# 2 -2.00991165  # age group 14-16 y : male
+# 3 -1.79298298  # age group >16 y : male
+# 4 -1.39976917  # age group <=13 y : female
+# 5 -0.63056182  # age group 14-16 y : female
+# 6  0.04604646  # age group >16 y : female
+
+# exponentiate the log odds -> real odds
+# divide by reference -> real odds ratio
+
+
+######################## plot model
+plot(allEffects(mod))
+plot_model(mod, type = "int", terms = c("age_group", "sex")) 
+
+
+######################## post hoc
+
+emmeans_results <- emmeans(mod, ~ age_group * sex)
+emmeans_results # emmean corresponds to my own calculations; corresponds to estimates above
+
+emmeans_results_tib <- as_tibble(emmeans_results)
+emmeans_results_tib %>% mutate(epx_emmean = exp(emmean)) # gives me the true odds
+
+pairs(emmeans_results) # gives p values
+pairs(emmeans_results, type = "response") # calculates ratio (reverse)
+confint(emmeans_results, type = "response") # is probability; not OR
+summary(emmeans_results)
+
+# OR
+emmeans_results <- emmeans(mod, ~ age_group * sex, type = "response")
+pairs(emmeans_results, reverse = T)
+emmeans_results <- emmeans(mod, "hcf", type = "response")
+pairs(emmeans_results, reverse = T)
+
+
+
+
+# Plot interaction
+emmip(mod, sex ~ age_group, CIs=TRUE, plotit=T)+theme_bw()
+
+
+# nearest health care facility
+emmeans_results <- emmeans(mod, ~ hcf)
+emmeans_results  # same as calculated
+pairs(emmeans_results)
+
+
+######################## plot prediction 
+mod <- glm(d_interpretation ~ age_group*sex + hcf, data = data, family=binomial())
+summary(mod) 
+
+mod %>% 
+  plot_model(type = "pred", 
+             terms = c("age_group", 
+                       "sex",
+                       "hcf")) + 
+  ylab("predicted percent with sufficient immunity")+
+  xlab("age (years)") +
+  ggtitle("predicted probabilities of having sufficient against tetanus") +
+  scale_color_discrete(name = "sex", labels = c("male", "female")) +
+  theme_bw()
+
+
+```
+
+
+
+
+```{r figure s3}
+
+data %>% 
+  filter(sex == "male") %>% 
+  ggplot(aes(age, t_conc_2, color=t_outside_range)) + 
+  geom_jitter() + 
+  geom_smooth(method = "lm", color = "black") +
+  labs(colour = "outside range")+
+  scale_color_manual(values = c("blue4","orangered")) +
+  theme_bw() +
+  ylab("anti-tetanus titer (IU/ml)") +
+  xlab("age (years)") +
+  geom_hline(yintercept=0.5, color = "red", size=0.8) +
+  geom_hline(yintercept = 5, color = "grey16", linetype = "dashed") +
+  facet_zoom(ylim = c(0, 7.5)) -> A
+
+data %>% 
+  filter(sex == "female") %>% 
+  ggplot(aes(age, t_conc_2, color=t_outside_range)) + 
+  geom_jitter() + 
+  geom_smooth(method = "lm", color = "black") +
+  labs(colour = "outside range")+
+  scale_color_manual(values = c("blue4","orangered")) +
+  theme_bw() +
+  ylab("anti-tetanus titer (IU/ml)") +
+  xlab("age (years)") +
+  geom_hline(yintercept=0.5, color = "red", size=0.8) +
+  geom_hline(yintercept = 5, color = "grey16", linetype = "dashed") +
+  facet_zoom(ylim = c(0, 7.5)) -> B
+
+ggarrange(A, B, ncol = 1, nrow = 2,labels = c("A", "B")) -> figure_S3
+
+figure_S3
+
+
+```
+
+
+```{r figure 1 - tetanus}
+
+# data to be added
+# there are some participants not protected at all; the "0" needs to be added; it is not part automatically in table
+data.frame(hcf = c("ph", "ph", "ph", "ph", "ph", "ph"),
+           age = c(11,11,12,13, 14, 14), 
+           sex = c("male","female","female","female","male","female"),
+           prop = c(0.0,0.0,0.0,0.0,0.0,0.0)) -> add_rows_t
+
+data %>% 
+  dplyr::select(hcf, age, sex, t_interpretation) %>% 
+  dplyr::group_by(hcf, age, sex, t_interpretation) %>% 
+  summarize(freq = n()) %>% 
+  mutate(prop = freq / sum(freq)) %>% 
+  filter(t_interpretation == "protected") %>% 
+  dplyr::select(hcf, age, sex, prop) %>% 
+  ungroup() %>% 
+  rbind(add_rows_t) %>% 
+  ggplot() +
+  geom_line(aes(x=age, y=prop, color = sex), size=1.2) + 
+  ylim(0,1) +
+  xlim(11,18) +
+  facet_wrap(~hcf) +
+  theme_bw() +
+  scale_color_manual(values=c("#440154FF", "#3CBB75FF")) +
+  ggtitle("proportion of participants with sufficient protection against tetanus") +
+  ylab("proportion sufficient protection \nagainst tetanus") +
+  xlab("age (years)") -> figure_1_tetanus
+  
+figure_1_tetanus
+
+```
+
+
+```{r table s2 bivariate anti-tetanus}
+
+tbl=table(data$prov, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.7025
+
+tbl=table(data$district, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.238
+
+tbl=table(data$sex, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.1187
+epitab(tbl)
+
+tbl=table(data$age_group, data$t_interpretation)
+tbl
+chisq.test(tbl)  # p-value = 0.0001856
+epitab(tbl)
+
+tbl=table(data$hcf, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.2475
+epitab(tbl)
+
+tbl=table(data$ethnic_group, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.6992
+epitab(tbl)
+
+tbl=table(data$n_household_members, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.7406
+epitab(tbl)
+
+tbl=table(data$vaccinations_school, data$t_interpretation)
+tbl
+chisq.test(tbl) # p-value = 0.2042
+epitab(tbl)
+
+
+```
+
+
+
+```{r multivariable models - tetanus}
+
+# in bivariate analysis, age and sex of the participants was significantly associated with the outcome
+
+# there are several option for running multivariable analysis for the anti-tetanus data
+# age can be used both as numeric variable and with age groups
+# throughout the paper, we used age as categorical variable
+# for consistency; age will be used as categorical variable
+
+
+# age as factor
+mod1 <- glm(t_interpretation ~ age_group + sex, data = data, family=binomial())
+summary(mod1)
+
+vif(mod1) # ok
+
+step <- stepAIC(mod1)
+summary(step)
+step$anova # t_int_2 ~ age_group + sex
+
+# Check for interaction
+# Interaction?
+modi <- glm(t_interpretation ~ (age_group + sex)^2, data = data, family=binomial())
+summary(modi) # yes, there is an interaction
+
+
+
+
+# age as factor and interaction
+mod2 <- glm(t_interpretation ~ age_group * sex, data = data, family=binomial())
+summary(mod2)
+
+vif(mod2) # interaction is over 10; due to interaction
+
+step <- stepAIC(mod2)
+summary(step)
+step$anova # t_int_2 ~ age_group * sex
+
+
+# model with interaction 
+# wrong estimates
+tab_model(mod2, show.aic = TRUE)
+tab_model(mod2, show.aic = TRUE, transform = NULL)
+
+```
+
+
+
+```{r table 1 final model tetanus and table s4}
+
+
+# in the code chunk before, I looked at model options
+# I selected the final model
+# now we extract the model information for Table 1
+
+
+
+######################## final model - age is categorical
+mod <- glm(t_interpretation ~ age_group * sex, data = data, family=binomial())
+summary(mod)
+# calculate OR and CIs
+# estimates are not correct because there is an interaction
+cbind(round(coef(summary(mod)),4), OR=exp(mod$coefficients), exp(confint(mod)))
+
+######################## model comparisons
+null <- glm(t_interpretation ~ 1, data = data, family=binomial())
+anova(mod, null, test="Chisq") # significant
+Anova(mod, type = "II", test.statistic = "Wald") # significant
+plot(fitted(mod),rstandard(mod))
+
+
+########################################################### table s4
+# extract numbers from model
+# but estimates for interaction are not correct yet 
+# estimates for age and sex cannot be interpreted individually
+tab_model(mod, show.aic = T, transform = NULL)
+tab_model(mod, show.aic = T) # Table with OR (wrong OR)
+
+
+
+########################################################### table 1
+
+# true ORs for variables that interact with each other can be calculated by hand from the information we obtained above
+# calculation done in excel; NOT part of the script
+
+# alternative: use allEffects()
+
+allEffects(mod) # only probabilities
+allEffects(mod) %>% summary() # probabilities and intervals
+
+# real log odds
+res <- allEffects(mod)
+res$`age_group:sex`$fit  # same as calculated
+# 1 -0.5596158 # Age group ≤13 years : Male
+# 2 -1.2286654 # Age group 14-16 years : Male
+# 3 -0.9480394 # Age group >16 years : Male
+# 4 -1.5998685 # Age group ≤13 years : Female
+# 5 -0.7731899 # Age group 14-16 years : Female
+# 6  0.2933478 # Age group >16 years : Female
+
+# exponentiate the log odds -> real odds
+# divide by reference -> real odds ratio
+
+
+
+######################## plot model
+plot(allEffects(mod))
+plot_model(mod, type = "int",terms = c("age_group", "sex")) 
+
+
+######################## post hoc
+
+emmeans_results <- emmeans(mod, ~ age_group * sex)
+emmeans_results # emmean corresponds to my own calculations
+
+emmeans_results_tib <- as_tibble(emmeans_results)
+emmeans_results_tib %>% mutate(epx_emmean = exp(emmean)) # gives me the true odds
+
+pairs(emmeans_results) # gives p values
+#plot(emmeans_results, comparisons = TRUE)
+pairs(emmeans_results, type = "response") # calculates ratio (reverse)
+
+# Plot interaction
+emmip(mod, sex ~ age_group, CIs=TRUE, plotit=T)+theme_bw()
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
