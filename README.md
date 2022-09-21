@@ -17,3 +17,5 @@ Submitted to Journal of Infectious Diseases. <br>
 DATA & FILE OVERVIEW:<br>
 
 dt_code: code needed to replicate the results as presented in **Vantava et al. (2022). Low seroprotection against diphtheria and tetanus in Lao adolescents**. 
+
+The data is not available online. Please contact the corresponding author to request a minimal dataset.
